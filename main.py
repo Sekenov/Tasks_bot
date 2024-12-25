@@ -1,4 +1,7 @@
 import asyncio
+import os
+os.environ["PORT"] = "8080"
+
 import logging
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, Router
