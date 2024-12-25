@@ -39,10 +39,11 @@ def generate_navigation_buttons():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
 def calculate_time_left(deadline):
     """Вычисляет оставшееся время до дедлайна"""
-    now = datetime.now(LOCAL_TZ)  # Текущее время в локальном часовом поясе
+    now = datetime.now(LOCAL_TZ)  # Указываем часовой пояс
+    if deadline.tzinfo is None:  # Если дедлайн не имеет часового пояса
+        deadline = deadline.replace(tzinfo=LOCAL_TZ)
     remaining = deadline - now
     days, seconds = divmod(remaining.total_seconds(), 86400)
     hours, seconds = divmod(seconds, 3600)
