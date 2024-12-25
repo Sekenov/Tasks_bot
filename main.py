@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from pytz import timezone
 
-LOCAL_TZ = timezone("Asia/Almaty")
+LOCAL_TZ = timezone("Asia/Aqtobe")
 
 # Токен бота
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
