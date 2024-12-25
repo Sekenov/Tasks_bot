@@ -304,18 +304,24 @@ async def send_reminders():
             remaining_time = task["deadline"] - now
 
             # Напоминания за 24, 12, 6, 3 и 1 час
-            if timedelta(hours=24) >= remaining_time > timedelta(hours=23, minutes=59):
+            if remaining_time <= timedelta(hours=24) and not task["reminders"]["24_hours"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 24 часа.")
-            elif timedelta(hours=12) >= remaining_time > timedelta(hours=11, minutes=59):
+                task["reminders"]["24_hours"] = True
+            elif remaining_time <= timedelta(hours=12) and not task["reminders"]["12_hours"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 12 часов.")
-            elif timedelta(hours=6) >= remaining_time > timedelta(hours=5, minutes=59):
+                task["reminders"]["12_hours"] = True
+            elif remaining_time <= timedelta(hours=6) and not task["reminders"]["6_hours"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 6 часов.")
-            elif timedelta(hours=3) >= remaining_time > timedelta(hours=2, minutes=59):
+                task["reminders"]["6_hours"] = True
+            elif remaining_time <= timedelta(hours=3) and not task["reminders"]["3_hours"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 3 часа.")
-            elif timedelta(hours=1) >= remaining_time > timedelta(minutes=59):
+                task["reminders"]["3_hours"] = True
+            elif remaining_time <= timedelta(hours=1) and not task["reminders"]["1_hour"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" остался 1 час.")
+                task["reminders"]["1_hour"] = True
 
-        await asyncio.sleep(60)  # Проверяем задачи каждые 60 секунд
+        await asyncio.sleep(60)  # Проверяем задачи каждую минуту
+
 
 
 
