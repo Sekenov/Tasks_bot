@@ -290,11 +290,11 @@ async def handle_navigation(call: CallbackQuery):
 
 
 async def send_reminders():
-    """Фоновая задача для отправки напоминаний"""
+    """Фоновая задача для отправки напоминаний."""
     while True:
         now = datetime.now()
         for task in tasks:
-            if task.get("completed"):
+            if task.get("completed"):  # Пропускаем выполненные задачи
                 continue
 
             remaining_time = task["deadline"] - now
@@ -311,7 +311,8 @@ async def send_reminders():
             elif timedelta(hours=1) >= remaining_time > timedelta(minutes=59):
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" остался 1 час.")
 
-        await asyncio.sleep(60)  # Проверяем каждые 60 секунд
+        await asyncio.sleep(60)  # Проверяем задачи каждые 60 секунд
+
 
 
 async def main():
