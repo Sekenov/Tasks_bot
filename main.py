@@ -1,7 +1,5 @@
 import asyncio
 import os
-os.environ["PORT"] = "8080"
-
 import logging
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, Router
@@ -11,6 +9,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 from pytz import timezone
 
 LOCAL_TZ = timezone("Asia/Almaty")
+
 # Токен бота
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
@@ -30,7 +29,6 @@ tasks = []  # Список всех задач
 user_states = {}  # Для отслеживания этапов создания задачи
 user_database = {}  # База данных пользователей
 
-
 def generate_navigation_buttons():
     """Генерирует кнопки для навигации между шагами"""
     buttons = [
@@ -41,18 +39,18 @@ def generate_navigation_buttons():
 
 def calculate_time_left(deadline):
     """Вычисляет оставшееся время до дедлайна"""
-    now = datetime.now(LOCAL_TZ)  # Указываем часовой пояс
-    if deadline.tzinfo is None:  # Если дедлайн не имеет часового пояса
-        deadline = deadline.replace(tzinfo=LOCAL_TZ)
+    now = datetime.now(LOCAL_TZ)  # Локальное время
+    if deadline.tzinfo is None:  # Если дедлайн без часового пояса
+        deadline = LOCAL_TZ.localize(deadline)
     remaining = deadline - now
-    days, seconds = divmod(remaining.total_seconds(), 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, _ = divmod(seconds, 60)
 
     if remaining.total_seconds() <= 0:
         return "Просрочено"
-    return f"{int(days)} д. {int(hours)} ч. {int(minutes)} мин."
 
+    days, seconds = divmod(remaining.total_seconds(), 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, _ = divmod(seconds, 60)
+    return f"{int(days)} д. {int(hours)} ч. {int(minutes)} мин."
 
 def generate_task_buttons(user_id):
     """Генерирует кнопки задач для завершения"""
@@ -61,7 +59,6 @@ def generate_task_buttons(user_id):
     for i, task in enumerate(user_tasks):
         buttons.append([InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"complete:{i}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
-
 
 @router.message(Command("start"))
 async def send_welcome(message: Message):
@@ -77,13 +74,11 @@ async def send_welcome(message: Message):
         "Чтобы узнать свой ID, используйте команду /myid."
     )
 
-
 @router.message(Command("myid"))
 async def get_my_id(message: Message):
     """Отправляет ID пользователя"""
     logging.info(f"Команда /myid от {message.from_user.id}")
     await message.reply(f"Ваш ID: {message.from_user.id}")
-
 
 @router.message(Command("tasks"))
 async def list_tasks(message: Message):
@@ -96,7 +91,6 @@ async def list_tasks(message: Message):
         await message.reply("У вас нет задач.")
         return
 
-    # Формируем краткую информацию о задачах
     task_list = "\n".join(
         [
             f"{i + 1}. {task['title']} (Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}, Осталось: {calculate_time_left(task['deadline'])})"
@@ -108,7 +102,6 @@ async def list_tasks(message: Message):
         f"Ваши задачи:\n\n{task_list}\n\n"
         "Отправьте номер задачи, чтобы получить полную информацию."
     )
-
 
 @router.message(Command("complete"))
 async def choose_task_to_complete(message: Message):
@@ -122,7 +115,6 @@ async def choose_task_to_complete(message: Message):
         return
 
     await message.reply("Выберите задачу, чтобы отметить её как выполненную:", reply_markup=task_buttons)
-
 
 @router.callback_query(lambda call: call.data.startswith("complete:"))
 async def complete_task(call: CallbackQuery):
@@ -138,6 +130,7 @@ async def complete_task(call: CallbackQuery):
 
     task = user_tasks[task_index]
     task["completed"] = True
+    task["reminders"] = None  # Удаляем напоминания
 
     # Уведомление администратора
     completed_by_username = next((username for username, uid in user_database.items() if uid == user_id), "Неизвестный")
@@ -153,7 +146,6 @@ async def complete_task(call: CallbackQuery):
         f"Статус: Завершена"
     )
 
-    # Удаляем задачу из списка
     tasks.remove(task)
 
     await call.message.edit_text(
@@ -163,7 +155,6 @@ async def complete_task(call: CallbackQuery):
         f"Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
         f"Статус: Завершена"
     )
-
 
 @router.message(lambda message: message.text.isdigit())
 async def handle_task_detail_request(message: Message):
@@ -189,7 +180,6 @@ async def handle_task_detail_request(message: Message):
         parse_mode=ParseMode.HTML
     )
 
-
 @router.message(Command("send"))
 async def start_task_creation(message: Message):
     """Начинает процесс создания задачи (доступно только администратору)"""
@@ -203,7 +193,6 @@ async def start_task_creation(message: Message):
         "task": {},
     }
     await message.reply("Введите название задачи:", reply_markup=generate_navigation_buttons())
-
 
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_task_creation(message: Message):
@@ -224,14 +213,13 @@ async def handle_task_creation(message: Message):
     elif state["step"] == "waiting_for_task_recipient":
         recipient_id = None
 
-        # Проверяем, указан ли @username
         if message.text.startswith("@"):
             username = message.text.lstrip("@")
-            recipient_id = user_database.get(username)  # Извлечение ID по username
+            recipient_id = user_database.get(username)
             if not recipient_id:
                 await message.reply("Этот пользователь не зарегистрирован. Попросите его отправить команду /start.")
                 return
-        else:  # Если указан ID напрямую
+        else:
             try:
                 recipient_id = int(message.text)
             except ValueError:
@@ -245,14 +233,19 @@ async def handle_task_creation(message: Message):
     elif state["step"] == "waiting_for_task_deadline_date":
         try:
             deadline = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
-            state["task"]["deadline"] = deadline
+            state["task"]["deadline"] = LOCAL_TZ.localize(deadline)
 
-            # Добавляем задачу
             task = state["task"]
             task["created_by"] = message.from_user.id
+            task["reminders"] = {
+                "24_hours": False,
+                "12_hours": False,
+                "6_hours": False,
+                "3_hours": False,
+                "1_hour": False,
+            }
             tasks.append(task)
 
-            # Уведомление получателя
             await bot.send_message(
                 task["recipient"],
                 f"Вам добавлена новая задача:\n\n<b>{task['title']}</b>\n"
@@ -261,10 +254,9 @@ async def handle_task_creation(message: Message):
                 parse_mode=ParseMode.HTML,
             )
             await message.reply("Задача успешно добавлена!")
-            del user_states[user_id]  # Удаляем состояние
+            del user_states[user_id]
         except ValueError:
             await message.reply("Укажите корректный формат даты (день.месяц.год ЧЧ:ММ).", reply_markup=generate_navigation_buttons())
-
 
 @router.callback_query()
 async def handle_navigation(call: CallbackQuery):
@@ -292,18 +284,17 @@ async def handle_navigation(call: CallbackQuery):
         del user_states[user_id]
         await call.message.edit_text("Создание задачи отменено.")
 
-
 async def send_reminders():
     """Фоновая задача для отправки напоминаний."""
     while True:
-        now = datetime.now()
+        now = datetime.now(LOCAL_TZ)
         for task in tasks:
-            if task.get("completed"):  # Пропускаем выполненные задачи
+            if task.get("completed"):
                 continue
 
-            remaining_time = task["deadline"] - now
+            deadline = task["deadline"]
+            remaining_time = deadline - now
 
-            # Напоминания за 24, 12, 6, 3 и 1 час
             if remaining_time <= timedelta(hours=24) and not task["reminders"]["24_hours"]:
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 24 часа.")
                 task["reminders"]["24_hours"] = True
@@ -320,21 +311,14 @@ async def send_reminders():
                 await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" остался 1 час.")
                 task["reminders"]["1_hour"] = True
 
-        await asyncio.sleep(60)  # Проверяем задачи каждую минуту
-
-
-
+        await asyncio.sleep(60)
 
 async def main():
     """Запуск бота"""
     dp.include_router(router)
-
-    # Запуск фоновой задачи для напоминаний
     asyncio.create_task(send_reminders())
-
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
