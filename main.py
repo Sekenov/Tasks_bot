@@ -8,7 +8,9 @@ from aiogram import Bot, Dispatcher, Router
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from pytz import timezone
 
+LOCAL_TZ = timezone("Asia/Almaty")
 # Токен бота
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
@@ -40,11 +42,12 @@ def generate_navigation_buttons():
 
 def calculate_time_left(deadline):
     """Вычисляет оставшееся время до дедлайна"""
-    now = datetime.now()
+    now = datetime.now(LOCAL_TZ)  # Текущее время в локальном часовом поясе
     remaining = deadline - now
     days, seconds = divmod(remaining.total_seconds(), 86400)
     hours, seconds = divmod(seconds, 3600)
     minutes, _ = divmod(seconds, 60)
+
     if remaining.total_seconds() <= 0:
         return "Просрочено"
     return f"{int(days)} д. {int(hours)} ч. {int(minutes)} мин."
