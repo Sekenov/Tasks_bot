@@ -331,45 +331,60 @@ async def ask_question_start(message: Message):
 
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
 
+
 @router.callback_query(lambda call: call.data.startswith("ask_task:"))
 async def handle_task_selection_for_question(call: CallbackQuery):
     """Обрабатывает выбор задачи для вопроса."""
     user_id = call.from_user.id
     task_index = int(call.data.split(":")[1])
 
+    # Находим задачи пользователя
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
     if task_index < 0 or task_index >= len(user_tasks):
         await call.answer("Некорректный выбор задачи.", show_alert=True)
         return
 
+    # Выбранная задача
     task = user_tasks[task_index]
+
+    # Обновляем состояние пользователя
     user_states[user_id] = {"step": "waiting_for_question", "task": task}
 
     await call.message.edit_text(
-        f"Вы выбрали задачу: {task['title']}\nТеперь напишите ваш вопрос."
+        f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
     )
 
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
+
+@router.message(lambda message: message.from_user.id in user_states)
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
-    state = user_states[user_id]
 
+    # Проверяем, что пользователь находится в нужном состоянии
+    if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
+        await message.reply("Вы не выбрали задачу для вопроса. Используйте команду /ask.")
+        return
+
+    # Получаем состояние и задачу
+    state = user_states[user_id]
     task = state["task"]
     question = message.text
 
-    # Отправить вопрос администратору
+    # Отправляем вопрос администратору
     await bot.send_message(
         ADMIN_ID,
         f"Поступил вопрос от пользователя @{message.from_user.username} по задаче:\n\n"
         f"<b>{task['title']}</b>\n"
         f"Вопрос: {question}",
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
 
     await message.reply("Ваш вопрос отправлен администратору.")
+    # Удаляем состояние пользователя
     del user_states[user_id]
+
+
 
 @router.message(Command("reply"))
 async def reply_to_question(message: Message):
