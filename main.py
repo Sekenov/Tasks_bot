@@ -340,22 +340,30 @@ async def ask_admin_start(message: Message):
 
 
 
-
 @router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя и отправляет его админу."""
     user_id = message.from_user.id
+    state = user_states[user_id]
     question = message.text
 
-    # Отправляем вопрос администратору
-    await bot.send_message(
-        ADMIN_ID,
-        f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
-        f"<b>Вопрос:</b> {question}",
-        parse_mode=ParseMode.HTML,
-    )
+    try:
+        # Логирование перед отправкой
+        logging.info(f"Отправляем вопрос админу от пользователя {user_id}: {question}")
 
-    await message.reply("Ваш вопрос отправлен администратору.")
+        # Отправляем вопрос администратору
+        await bot.send_message(
+            ADMIN_ID,
+            f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
+            f"<b>Вопрос:</b> {question}",
+            parse_mode=ParseMode.HTML,
+        )
+
+        await message.reply("Ваш вопрос отправлен администратору.")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке вопроса админу: {e}")
+        await message.reply("Произошла ошибка при отправке вопроса админу. Попробуйте снова.")
+
     # Удаляем состояние пользователя
     del user_states[user_id]
 
@@ -363,26 +371,6 @@ async def handle_question_input(message: Message):
 
 
 
-
-
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
-async def handle_question_input(message: Message):
-    """Обрабатывает ввод вопроса от пользователя и отправляет его админу."""
-    user_id = message.from_user.id
-    question = message.text
-
-    # Отправляем вопрос администратору
-    await bot.send_message(
-        ADMIN_ID,
-        f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
-        f"<b>Вопрос:</b> {question}",
-        parse_mode=ParseMode.HTML,
-    )
-
-    await message.reply("Ваш вопрос отправлен администратору.")
-    # Удаляем состояние пользователя
-    del user_states[user_id]
 
 
 
