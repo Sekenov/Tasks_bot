@@ -370,7 +370,7 @@ async def handle_task_selection_by_number(message: Message):
 
         await message.reply(
             f"Вы выбрали задачу: {task['title']}.\n"
-            "Теперь напишите ваш вопрос."
+            "Теперь напишите ваш вопрос по этой задаче."
         )
     except ValueError:
         await message.reply("Пожалуйста, введите корректный номер задачи.")
@@ -401,6 +401,7 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 
 
