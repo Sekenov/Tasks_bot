@@ -337,14 +337,19 @@ async def ask_question(message: Message):
         for i, task in enumerate(user_tasks)
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    user_states[user_id] = {"step": "waiting_for_task_choice"}  # Добавляем состояние для выбора задачи
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=keyboard)
 
 
 @router.callback_query(lambda call: call.data.startswith("ask_task:"))
 async def choose_task_for_question(call: CallbackQuery):
     """Запросить у пользователя вопрос по выбранной задаче"""
-    task_index = int(call.data.split(":")[1])
     user_id = call.from_user.id
+    if user_states.get(user_id, {}).get("step") != "waiting_for_task_choice":
+        await call.answer("Вы не находитесь в процессе задания вопроса.", show_alert=True)
+        return
+
+    task_index = int(call.data.split(":")[1])
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
     if task_index < 0 or task_index >= len(user_tasks):
