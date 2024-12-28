@@ -323,58 +323,42 @@ async def send_reminders():
 
 
 @router.message(Command("ask"))
-async def ask_question_start(message: Message):
-    """Начинает процесс запроса по задаче."""
+async def ask_admin_start(message: Message):
+    """Начинает процесс запроса вопроса админу."""
     user_id = message.from_user.id
 
     # Сбрасываем предыдущее состояние пользователя, если оно есть
     if user_id in user_states:
         del user_states[user_id]
 
-    # Получаем задачи пользователя
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+    # Устанавливаем состояние пользователя
+    user_states[user_id] = {"step": "waiting_for_question"}
 
-    if not user_tasks:
-        await message.reply("У вас нет активных задач.")
-        return
+    await message.reply("Пожалуйста, задайте свой вопрос администратору.")
 
-    # Формируем список задач
-    task_list = "\n".join([f"{i + 1}. {task['title']}" for i, task in enumerate(user_tasks)])
-    user_states[user_id] = {"step": "choosing_task", "tasks": user_tasks}
 
-    await message.reply(
-        f"Ваши задачи:\n\n{task_list}\n\n"
-        "Введите номер задачи, по которой хотите задать вопрос."
+
+
+
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
+async def handle_question_input(message: Message):
+    """Обрабатывает ввод вопроса от пользователя и отправляет его админу."""
+    user_id = message.from_user.id
+    question = message.text
+
+    # Отправляем вопрос администратору
+    await bot.send_message(
+        ADMIN_ID,
+        f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
+        f"<b>Вопрос:</b> {question}",
+        parse_mode=ParseMode.HTML,
     )
 
+    await message.reply("Ваш вопрос отправлен администратору.")
+    # Удаляем состояние пользователя
+    del user_states[user_id]
 
-
-
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "choosing_task")
-async def handle_task_selection_by_number(message: Message):
-    """Обрабатывает выбор задачи по номеру."""
-    user_id = message.from_user.id
-    state = user_states[user_id]
-
-    try:
-        task_number = int(message.text) - 1  # Номера задач начинаются с 1
-        user_tasks = state["tasks"]
-
-        if task_number < 0 or task_number >= len(user_tasks):
-            await message.reply("Некорректный номер задачи. Попробуйте снова.")
-            return
-
-        # Получаем выбранную задачу
-        task = user_tasks[task_number]
-        user_states[user_id] = {"step": "waiting_for_question", "task": task}
-
-        await message.reply(
-            f"Вы выбрали задачу: {task['title']}.\n"
-            "Теперь напишите ваш вопрос по этой задаче."
-        )
-    except ValueError:
-        await message.reply("Пожалуйста, введите корректный номер задачи.")
 
 
 
@@ -384,24 +368,22 @@ async def handle_task_selection_by_number(message: Message):
 
 @router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
 async def handle_question_input(message: Message):
-    """Обрабатывает ввод вопроса от пользователя."""
+    """Обрабатывает ввод вопроса от пользователя и отправляет его админу."""
     user_id = message.from_user.id
-    state = user_states[user_id]
-    task = state["task"]
     question = message.text
 
     # Отправляем вопрос администратору
     await bot.send_message(
         ADMIN_ID,
-        f"Поступил вопрос от пользователя @{message.from_user.username} по задаче:\n\n"
-        f"<b>{task['title']}</b>\n"
-        f"Вопрос: {question}",
+        f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
+        f"<b>Вопрос:</b> {question}",
         parse_mode=ParseMode.HTML,
     )
 
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 
 
