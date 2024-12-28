@@ -312,10 +312,16 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
+
+
 @router.message(Command("ask"))
 async def ask_question_start(message: Message):
     """Начинает процесс запроса по задаче."""
     user_id = message.from_user.id
+
+    # Логирование для диагностики
+    logging.info(f"Команда /ask от пользователя {user_id}")
+    logging.info(f"Текущее состояние user_states: {user_states}")
 
     # Сбрасываем предыдущее состояние пользователя, если оно есть
     if user_id in user_states:
@@ -334,14 +340,48 @@ async def ask_question_start(message: Message):
         ]
     )
 
+    # Устанавливаем состояние для пользователя
+    user_states[user_id] = {"step": "choosing_task"}
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
+
+
+@router.callback_query(lambda call: call.data.startswith("ask_task:"))
+async def handle_task_selection_for_question(call: CallbackQuery):
+    """Обрабатывает выбор задачи для вопроса."""
+    user_id = call.from_user.id
+
+    # Логирование для диагностики
+    logging.info(f"Выбор задачи пользователем {user_id}, состояние: {user_states.get(user_id)}")
+
+    # Проверяем текущее состояние
+    if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
+        await call.answer("Вы не находитесь в процессе выбора задачи.", show_alert=True)
+        return
+
+    task_index = int(call.data.split(":")[1])
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if task_index < 0 or task_index >= len(user_tasks):
+        await call.answer("Некорректный выбор задачи.", show_alert=True)
+        return
+
+    task = user_tasks[task_index]
+
+    # Обновляем состояние пользователя
+    user_states[user_id] = {"step": "waiting_for_question", "task": task}
+
+    await call.message.edit_text(
+        f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
+    )
+
+
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
 
     # Логирование для диагностики
-    logging.info(f"User states: {user_states}")
+    logging.info(f"Ввод вопроса от пользователя {user_id}, состояние: {user_states.get(user_id)}")
 
     # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
@@ -365,6 +405,7 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 async def main():
     """Запуск бота"""
