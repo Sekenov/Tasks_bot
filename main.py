@@ -324,7 +324,7 @@ async def send_reminders():
 
 @router.message(Command("ask"))
 async def ask_admin_start(message: Message):
-    """Начинает процесс запроса вопроса админу."""
+    """Запрашивает у пользователя вопрос для отправки админу."""
     user_id = message.from_user.id
 
     # Сбрасываем предыдущее состояние пользователя, если оно есть
@@ -334,8 +334,7 @@ async def ask_admin_start(message: Message):
     # Устанавливаем состояние пользователя
     user_states[user_id] = {"step": "waiting_for_question"}
 
-    await message.reply("Пожалуйста, задайте свой вопрос администратору.")
-
+    await message.reply("Пожалуйста, напишите ваш вопрос, который вы хотите отправить администратору.")
 
 
 
@@ -344,28 +343,31 @@ async def ask_admin_start(message: Message):
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя и отправляет его админу."""
     user_id = message.from_user.id
-    state = user_states[user_id]
     question = message.text
 
     try:
-        # Логирование перед отправкой
-        logging.info(f"Отправляем вопрос админу от пользователя {user_id}: {question}")
+        # Проверка, что ADMIN_ID указан правильно
+        if not ADMIN_ID:
+            await message.reply("Ошибка: ID администратора не указан. Сообщите об этом разработчику.")
+            return
 
         # Отправляем вопрос администратору
         await bot.send_message(
             ADMIN_ID,
-            f"Поступил вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
-            f"<b>Вопрос:</b> {question}",
+            f"❓ Вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n\n"
+            f"<b>{question}</b>",
             parse_mode=ParseMode.HTML,
         )
 
-        await message.reply("Ваш вопрос отправлен администратору.")
+        await message.reply("Ваш вопрос успешно отправлен администратору. Спасибо!")
     except Exception as e:
         logging.error(f"Ошибка при отправке вопроса админу: {e}")
-        await message.reply("Произошла ошибка при отправке вопроса админу. Попробуйте снова.")
+        await message.reply("Произошла ошибка при отправке вопроса админу. Попробуйте снова позже.")
+    finally:
+        # Очищаем состояние пользователя
+        if user_id in user_states:
+            del user_states[user_id]
 
-    # Удаляем состояние пользователя
-    del user_states[user_id]
 
 
 
