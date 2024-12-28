@@ -28,7 +28,7 @@ router = Router()
 tasks = []  # Список всех задач
 user_states = {}  # Для отслеживания этапов создания задачи
 user_database = {}  # База данных пользователей
-questions = {}  # Хранение вопросов и ответов
+pending_questions = {}  # Хранение вопросов пользователей
 
 def generate_navigation_buttons():
     """Генерирует кнопки для навигации между шагами"""
@@ -73,7 +73,7 @@ async def send_welcome(message: Message):
         "/tasks - Посмотреть список задач.\n"
         "/complete - Завершить задачу.\n"
         "/ask - Задать вопрос администратору.\n"
-        "Чтобы узнать свой ID, используйте команду /myid."
+        "\nЧтобы узнать свой ID, используйте команду /myid."
     )
 
 @router.message(Command("myid"))
@@ -82,84 +82,80 @@ async def get_my_id(message: Message):
     logging.info(f"Команда /myid от {message.from_user.id}")
     await message.reply(f"Ваш ID: {message.from_user.id}")
 
+@router.message(Command("tasks"))
+async def list_tasks(message: Message):
+    """Показывает список задач для текущего пользователя"""
+    logging.info(f"Команда /tasks от {message.from_user.id}")
+    user_id = message.from_user.id
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if not user_tasks:
+        await message.reply("У вас нет задач.")
+        return
+
+    task_list = "\n".join(
+        [
+            f"{i + 1}. {task['title']} (Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}, Осталось: {calculate_time_left(task['deadline'])})"
+            for i, task in enumerate(user_tasks)
+        ]
+    )
+
+    await message.reply(
+        f"Ваши задачи:\n\n{task_list}\n\n"
+        "Отправьте номер задачи, чтобы получить полную информацию."
+    )
+
 @router.message(Command("ask"))
 async def ask_admin(message: Message):
-    """Позволяет пользователю задать вопрос администратору"""
+    """Пользователь задаёт вопрос администратору"""
     logging.info(f"Команда /ask от {message.from_user.id}")
-    user_states[message.from_user.id] = {"step": "waiting_for_question"}
-    await message.reply("Введите ваш вопрос для администратора:")
+    pending_questions[message.from_user.id] = None  # Ожидаем текст вопроса
+    await message.reply("Введите ваш вопрос для администратора.")
 
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
-async def handle_question(message: Message):
-    """Обрабатывает вопрос пользователя и отправляет администратору"""
-    question = message.text
+@router.message(lambda message: message.from_user.id in pending_questions and pending_questions[message.from_user.id] is None)
+async def handle_user_question(message: Message):
+    """Получение вопроса от пользователя"""
     user_id = message.from_user.id
-    questions[user_id] = {"question": question, "answered": False}
+    pending_questions[user_id] = message.text
 
     await bot.send_message(
         ADMIN_ID,
-        f"Новый вопрос от @{message.from_user.username} ({user_id}):\n\n{question}\n\n"
-        "Для ответа используйте команду: /answer <user_id> <ответ>"
+        f"Вопрос от пользователя @{message.from_user.username} (ID: {user_id}):\n{message.text}\n\n"
+        f"Для ответа используйте команду: /answer {user_id} ваш_ответ"
     )
-    await message.reply("Ваш вопрос отправлен администратору. Ожидайте ответа.")
-    del user_states[user_id]
+    await message.reply("Ваш вопрос отправлен администратору.")
 
 @router.message(Command("answer"))
 async def answer_user(message: Message):
-    """Позволяет администратору ответить на вопрос пользователя"""
+    """Администратор отвечает на вопрос пользователя"""
     if message.from_user.id != ADMIN_ID:
         await message.reply("У вас нет прав для выполнения этой команды.")
         return
 
     args = message.text.split(maxsplit=2)
     if len(args) < 3:
-        await message.reply("Используйте формат: /answer <user_id> <ответ>")
+        await message.reply("Используйте формат: /answer user_id ответ")
         return
 
-    user_id = int(args[1])
-    answer = args[2]
-
-    if user_id not in questions or questions[user_id]["answered"]:
-        await message.reply("Этот пользователь не задавал вопросов или на вопрос уже был дан ответ.")
+    try:
+        user_id = int(args[1])
+        answer = args[2]
+    except ValueError:
+        await message.reply("Укажите корректный ID пользователя.")
         return
 
-    await bot.send_message(user_id, f"Администратор ответил на ваш вопрос:\n\n{answer}")
-    questions[user_id]["answered"] = True
+    if user_id not in pending_questions:
+        await message.reply("Не найдено вопросов от данного пользователя.")
+        return
+
+    del pending_questions[user_id]  # Удаляем вопрос из ожидания
+
+    await bot.send_message(user_id, f"Ответ от администратора:\n{answer}")
     await message.reply("Ответ отправлен пользователю.")
-
-async def send_reminders():
-    """Фоновая задача для отправки напоминаний."""
-    while True:
-        now = datetime.now(LOCAL_TZ)
-        for task in tasks:
-            if task.get("completed"):
-                continue
-
-            deadline = task["deadline"]
-            remaining_time = deadline - now
-
-            if remaining_time <= timedelta(hours=24) and not task["reminders"]["24_hours"]:
-                await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 24 часа.")
-                task["reminders"]["24_hours"] = True
-            elif remaining_time <= timedelta(hours=12) and not task["reminders"]["12_hours"]:
-                await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 12 часов.")
-                task["reminders"]["12_hours"] = True
-            elif remaining_time <= timedelta(hours=6) and not task["reminders"]["6_hours"]:
-                await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 6 часов.")
-                task["reminders"]["6_hours"] = True
-            elif remaining_time <= timedelta(hours=3) and not task["reminders"]["3_hours"]:
-                await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" осталось 3 часа.")
-                task["reminders"]["3_hours"] = True
-            elif remaining_time <= timedelta(hours=1) and not task["reminders"]["1_hour"]:
-                await bot.send_message(task["recipient"], f"Напоминание! До задачи \"{task['title']}\" остался 1 час.")
-                task["reminders"]["1_hour"] = True
-
-        await asyncio.sleep(60)
 
 async def main():
     """Запуск бота"""
     dp.include_router(router)
-    asyncio.create_task(send_reminders())
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
