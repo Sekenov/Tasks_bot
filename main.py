@@ -312,6 +312,16 @@ async def send_reminders():
 
         await asyncio.sleep(60)
 
+
+
+
+
+
+
+
+
+
+
 @router.message(Command("ask"))
 async def ask_question_start(message: Message):
     """Начинает процесс запроса по задаче."""
@@ -339,7 +349,11 @@ async def ask_question_start(message: Message):
     # Устанавливаем состояние для выбора задачи
     user_states[user_id] = {"step": "choosing_task"}
 
+    # Логирование для проверки
+    logging.info(f"Состояние пользователя {user_id} после /ask: {user_states[user_id]}")
+
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
+
 
 
 
@@ -348,6 +362,9 @@ async def ask_question_start(message: Message):
 async def handle_task_selection_for_question(call: CallbackQuery):
     """Обрабатывает выбор задачи для вопроса."""
     user_id = call.from_user.id
+
+    # Логирование для диагностики
+    logging.info(f"Колбэк ask_task вызван для пользователя {user_id}, данные: {call.data}")
 
     # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
@@ -376,10 +393,15 @@ async def handle_task_selection_for_question(call: CallbackQuery):
 
 
 
+
+
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
+
+    # Логирование для диагностики
+    logging.info(f"Ввод вопроса от пользователя {user_id}, состояние: {user_states.get(user_id)}")
 
     # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
@@ -403,6 +425,7 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 
 
