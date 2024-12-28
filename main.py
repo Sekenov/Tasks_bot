@@ -312,6 +312,93 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
+@router.message(Command("ask"))
+async def ask_question_start(message: Message):
+    """Начинает процесс запроса по задаче."""
+    user_id = message.from_user.id
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if not user_tasks:
+        await message.reply("У вас нет активных задач.")
+        return
+
+    task_buttons = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask_task:{i}")]
+            for i, task in enumerate(user_tasks)
+        ]
+    )
+
+    await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
+
+@router.callback_query(lambda call: call.data.startswith("ask_task:"))
+async def handle_task_selection_for_question(call: CallbackQuery):
+    """Обрабатывает выбор задачи для вопроса."""
+    user_id = call.from_user.id
+    task_index = int(call.data.split(":")[1])
+
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if task_index < 0 or task_index >= len(user_tasks):
+        await call.answer("Некорректный выбор задачи.", show_alert=True)
+        return
+
+    task = user_tasks[task_index]
+    user_states[user_id] = {"step": "waiting_for_question", "task": task}
+
+    await call.message.edit_text(
+        f"Вы выбрали задачу: {task['title']}\nТеперь напишите ваш вопрос."
+    )
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
+async def handle_question_input(message: Message):
+    """Обрабатывает ввод вопроса от пользователя."""
+    user_id = message.from_user.id
+    state = user_states[user_id]
+
+    task = state["task"]
+    question = message.text
+
+    # Отправить вопрос администратору
+    await bot.send_message(
+        ADMIN_ID,
+        f"Поступил вопрос от пользователя @{message.from_user.username} по задаче:\n\n"
+        f"<b>{task['title']}</b>\n"
+        f"Вопрос: {question}",
+        parse_mode=ParseMode.HTML
+    )
+
+    await message.reply("Ваш вопрос отправлен администратору.")
+    del user_states[user_id]
+
+@router.message(Command("reply"))
+async def reply_to_question(message: Message):
+    """Позволяет администратору ответить на вопрос."""
+    if message.from_user.id != ADMIN_ID:
+        await message.reply("У вас нет прав для выполнения этой команды.")
+        return
+
+    try:
+        # Формат: /reply <user_id> <ответ>
+        command_parts = message.text.split(maxsplit=2)
+        if len(command_parts) < 3:
+            await message.reply("Формат команды: /reply <user_id> <ответ>")
+            return
+
+        user_id = int(command_parts[1])
+        reply_text = command_parts[2]
+
+        await bot.send_message(
+            user_id,
+            f"Администратор ответил на ваш вопрос:\n\n{reply_text}"
+        )
+
+        await message.reply("Ответ отправлен пользователю.")
+    except ValueError:
+        await message.reply("Укажите корректный ID пользователя.")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке ответа: {e}")
+        await message.reply("Произошла ошибка при отправке ответа.")
 
 async def main():
     """Запуск бота"""
