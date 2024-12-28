@@ -14,7 +14,7 @@ LOCAL_TZ = timezone("Asia/Aqtobe")
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
 # Укажите ID администратора
-ADMIN_ID = 1313126991  # Замените на ваш Telegram ID
+ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
@@ -316,6 +316,11 @@ async def send_reminders():
 async def ask_question_start(message: Message):
     """Начинает процесс запроса по задаче."""
     user_id = message.from_user.id
+
+    # Сбрасываем предыдущее состояние пользователя, если оно есть
+    if user_id in user_states:
+        del user_states[user_id]
+
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
     if not user_tasks:
@@ -330,43 +335,20 @@ async def ask_question_start(message: Message):
     )
 
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
-
-
-@router.callback_query(lambda call: call.data.startswith("ask_task:"))
-async def handle_task_selection_for_question(call: CallbackQuery):
-    """Обрабатывает выбор задачи для вопроса."""
-    user_id = call.from_user.id
-    task_index = int(call.data.split(":")[1])
-
-    # Находим задачи пользователя
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-
-    if task_index < 0 or task_index >= len(user_tasks):
-        await call.answer("Некорректный выбор задачи.", show_alert=True)
-        return
-
-    # Выбранная задача
-    task = user_tasks[task_index]
-
-    # Обновляем состояние пользователя
-    user_states[user_id] = {"step": "waiting_for_question", "task": task}
-
-    await call.message.edit_text(
-        f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
-    )
-
-
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
 
-    # Проверяем, что пользователь находится в нужном состоянии
+    # Логирование для диагностики
+    logging.info(f"User states: {user_states}")
+
+    # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
         await message.reply("Вы не выбрали задачу для вопроса. Используйте команду /ask.")
         return
 
-    # Получаем состояние и задачу
+    # Получаем данные состояния
     state = user_states[user_id]
     task = state["task"]
     question = message.text
@@ -383,37 +365,6 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
-
-
-
-@router.message(Command("reply"))
-async def reply_to_question(message: Message):
-    """Позволяет администратору ответить на вопрос."""
-    if message.from_user.id != ADMIN_ID:
-        await message.reply("У вас нет прав для выполнения этой команды.")
-        return
-
-    try:
-        # Формат: /reply <user_id> <ответ>
-        command_parts = message.text.split(maxsplit=2)
-        if len(command_parts) < 3:
-            await message.reply("Формат команды: /reply <user_id> <ответ>")
-            return
-
-        user_id = int(command_parts[1])
-        reply_text = command_parts[2]
-
-        await bot.send_message(
-            user_id,
-            f"Администратор ответил на ваш вопрос:\n\n{reply_text}"
-        )
-
-        await message.reply("Ответ отправлен пользователю.")
-    except ValueError:
-        await message.reply("Укажите корректный ID пользователя.")
-    except Exception as e:
-        logging.error(f"Ошибка при отправке ответа: {e}")
-        await message.reply("Произошла ошибка при отправке ответа.")
 
 async def main():
     """Запуск бота"""
