@@ -317,17 +317,18 @@ async def ask_question_start(message: Message):
     """Начинает процесс запроса по задаче."""
     user_id = message.from_user.id
 
-    # Сбрасываем предыдущее состояние
+    # Сбрасываем предыдущее состояние пользователя, если оно есть
     if user_id in user_states:
         del user_states[user_id]
 
+    # Получаем задачи пользователя
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
     if not user_tasks:
         await message.reply("У вас нет активных задач.")
         return
 
-    # Создание кнопок для выбора задачи
+    # Создаем кнопки для задач
     task_buttons = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask_task:{i}")]
@@ -335,13 +336,11 @@ async def ask_question_start(message: Message):
         ]
     )
 
-    # Запись состояния
+    # Устанавливаем состояние для выбора задачи
     user_states[user_id] = {"step": "choosing_task"}
 
-    # Логирование для проверки
-    logging.info(f"Состояние пользователя {user_id} после /ask: {user_states[user_id]}")
-
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
+
 
 
 
@@ -350,15 +349,12 @@ async def handle_task_selection_for_question(call: CallbackQuery):
     """Обрабатывает выбор задачи для вопроса."""
     user_id = call.from_user.id
 
-    # Логирование для диагностики
-    logging.info(f"Колбэк ask_task вызван для пользователя {user_id}, данные: {call.data}")
-
-    # Проверяем текущее состояние
+    # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
         await call.answer("Вы не находитесь в процессе выбора задачи.", show_alert=True)
         return
 
-    # Получаем индекс задачи из callback_data
+    # Получаем индекс выбранной задачи
     task_index = int(call.data.split(":")[1])
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
@@ -369,10 +365,8 @@ async def handle_task_selection_for_question(call: CallbackQuery):
     # Получаем выбранную задачу
     task = user_tasks[task_index]
 
-    # Обновляем состояние
+    # Обновляем состояние пользователя
     user_states[user_id] = {"step": "waiting_for_question", "task": task}
-
-    logging.info(f"Пользователь {user_id} выбрал задачу: {task['title']}. Состояние обновлено: {user_states[user_id]}")
 
     await call.message.edit_text(
         f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
@@ -381,13 +375,11 @@ async def handle_task_selection_for_question(call: CallbackQuery):
 
 
 
+
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
-
-    # Логирование для диагностики
-    logging.info(f"Ввод вопроса от пользователя {user_id}, состояние: {user_states.get(user_id)}")
 
     # Проверяем состояние
     if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
