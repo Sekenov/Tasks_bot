@@ -324,18 +324,13 @@ async def send_reminders():
 
 @router.message(Command("ask"))
 async def ask_admin_start(message: Message):
-    """Запрашивает у пользователя вопрос для отправки админу."""
+    """Начинает процесс запроса вопроса админу."""
     user_id = message.from_user.id
-
-    # Сбрасываем предыдущее состояние пользователя, если оно есть
-    if user_id in user_states:
-        del user_states[user_id]
 
     # Устанавливаем состояние пользователя
     user_states[user_id] = {"step": "waiting_for_question"}
 
     await message.reply("Пожалуйста, напишите ваш вопрос, который вы хотите отправить администратору.")
-
 
 
 
@@ -346,7 +341,7 @@ async def handle_question_input(message: Message):
     question = message.text
 
     try:
-        # Проверка, что ADMIN_ID указан правильно
+        # Проверка наличия ADMIN_ID
         if not ADMIN_ID:
             await message.reply("Ошибка: ID администратора не указан. Сообщите об этом разработчику.")
             return
@@ -359,7 +354,7 @@ async def handle_question_input(message: Message):
             parse_mode=ParseMode.HTML,
         )
 
-        await message.reply("Ваш вопрос успешно отправлен администратору. Спасибо!")
+        await message.reply("Ваш вопрос успешно отправлен администратору.")
     except Exception as e:
         logging.error(f"Ошибка при отправке вопроса админу: {e}")
         await message.reply("Произошла ошибка при отправке вопроса админу. Попробуйте снова позже.")
