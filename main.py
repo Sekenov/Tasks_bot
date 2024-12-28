@@ -350,6 +350,7 @@ async def ask_question_start(message: Message):
 
 
 
+
 @router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "choosing_task")
 async def handle_task_selection_by_number(message: Message):
     """Обрабатывает выбор задачи по номеру."""
@@ -401,6 +402,8 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
+
 
 
 
