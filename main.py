@@ -347,7 +347,6 @@ async def ask_question(message: Message):
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=keyboard)
 
 
-
 @router.callback_query(lambda call: call.data.startswith("ask_task:"))
 async def choose_task_for_question(call: CallbackQuery):
     """Запросить у пользователя вопрос по выбранной задаче"""
@@ -355,33 +354,38 @@ async def choose_task_for_question(call: CallbackQuery):
         task_index = int(call.data.split(":")[1])
         user_id = call.from_user.id
 
-        # Логирование данных
+        # Логируем действие пользователя
         logging.info(f"Пользователь {user_id} выбрал задачу с индексом {task_index}")
 
         user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
-        # Проверка на корректный выбор
+        # Проверка валидности задачи
         if task_index < 0 or task_index >= len(user_tasks):
             await call.answer("Некорректный выбор задачи.", show_alert=True)
+            logging.warning(f"Некорректный индекс задачи: {task_index}")
             return
 
         # Получаем задачу
         task = user_tasks[task_index]
+        logging.info(f"Выбрана задача: {task}")
 
         # Обновляем состояние пользователя
         user_states[user_id] = {
             "step": "waiting_for_question",
             "task": task
         }
+        logging.info(f"Состояние обновлено для пользователя {user_id}: {user_states[user_id]}")
 
-        # Запрашиваем вопрос
+        # Отправляем сообщение с запросом вопроса
         await call.message.edit_text(
             f"Вы выбрали задачу: {task['title']}\n\nНапишите свой вопрос."
         )
+        logging.info(f"Сообщение обновлено для пользователя {user_id}")
     except Exception as e:
         # Логируем ошибки
         logging.error(f"Ошибка в обработчике выбора задачи: {e}")
         await call.answer("Произошла ошибка. Попробуйте снова.", show_alert=True)
+
 
 
 
