@@ -352,14 +352,14 @@ async def handle_task_selection_for_question(call: CallbackQuery):
     user_id = call.from_user.id
 
     # Логирование для диагностики
-    logging.info(f"Колбэк ask_task вызван для пользователя {user_id}, состояние: {user_states.get(user_id)}")
+    logging.info(f"Колбэк ask_task вызван для пользователя {user_id}, данные: {call.data}")
 
     # Проверяем текущее состояние
     if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
         await call.answer("Вы не находитесь в процессе выбора задачи.", show_alert=True)
         return
 
-    # Получаем индекс задачи из колбэка
+    # Получаем индекс задачи из callback_data
     task_index = int(call.data.split(":")[1])
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
@@ -378,6 +378,7 @@ async def handle_task_selection_for_question(call: CallbackQuery):
     await call.message.edit_text(
         f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
     )
+
 
 
 
@@ -411,6 +412,7 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 
 async def main():
