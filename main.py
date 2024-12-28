@@ -328,42 +328,61 @@ async def ask_question(message: Message):
     user_id = message.from_user.id
     user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
+    # Логируем задачи пользователя
+    logging.info(f"Задачи пользователя {user_id}: {user_tasks}")
+
     if not user_tasks:
         await message.reply("У вас нет активных задач для вопросов.")
         return
 
+    # Генерируем кнопки
     buttons = [
         [InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask_task:{i}")]
         for i, task in enumerate(user_tasks)
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    user_states[user_id] = {"step": "waiting_for_task_choice"}  # Добавляем состояние для выбора задачи
+
+    # Обновляем состояние
+    user_states[user_id] = {"step": "waiting_for_task_choice"}
     await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=keyboard)
+
 
 
 @router.callback_query(lambda call: call.data.startswith("ask_task:"))
 async def choose_task_for_question(call: CallbackQuery):
     """Запросить у пользователя вопрос по выбранной задаче"""
-    user_id = call.from_user.id
-    if user_states.get(user_id, {}).get("step") != "waiting_for_task_choice":
-        await call.answer("Вы не находитесь в процессе задания вопроса.", show_alert=True)
-        return
+    try:
+        task_index = int(call.data.split(":")[1])
+        user_id = call.from_user.id
 
-    task_index = int(call.data.split(":")[1])
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+        # Логирование данных
+        logging.info(f"Пользователь {user_id} выбрал задачу с индексом {task_index}")
 
-    if task_index < 0 or task_index >= len(user_tasks):
-        await call.answer("Некорректный выбор задачи.", show_alert=True)
-        return
+        user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
-    task = user_tasks[task_index]
-    user_states[user_id] = {
-        "step": "waiting_for_question",
-        "task": task
-    }
-    await call.message.edit_text(
-        f"Вы выбрали задачу: {task['title']}\n\nНапишите свой вопрос."
-    )
+        # Проверка на корректный выбор
+        if task_index < 0 or task_index >= len(user_tasks):
+            await call.answer("Некорректный выбор задачи.", show_alert=True)
+            return
+
+        # Получаем задачу
+        task = user_tasks[task_index]
+
+        # Обновляем состояние пользователя
+        user_states[user_id] = {
+            "step": "waiting_for_question",
+            "task": task
+        }
+
+        # Запрашиваем вопрос
+        await call.message.edit_text(
+            f"Вы выбрали задачу: {task['title']}\n\nНапишите свой вопрос."
+        )
+    except Exception as e:
+        # Логируем ошибки
+        logging.error(f"Ошибка в обработчике выбора задачи: {e}")
+        await call.answer("Произошла ошибка. Попробуйте снова.", show_alert=True)
+
 
 
 @router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
