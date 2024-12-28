@@ -338,77 +338,53 @@ async def ask_question_start(message: Message):
         await message.reply("У вас нет активных задач.")
         return
 
-    # Создаем кнопки для задач
-    task_buttons = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask_task:{i}")]
-            for i, task in enumerate(user_tasks)
-        ]
-    )
+    # Формируем список задач
+    task_list = "\n".join([f"{i + 1}. {task['title']}" for i, task in enumerate(user_tasks)])
+    user_states[user_id] = {"step": "choosing_task", "tasks": user_tasks}
 
-    # Устанавливаем состояние для выбора задачи
-    user_states[user_id] = {"step": "choosing_task"}
-
-    # Логирование для проверки
-    logging.info(f"Состояние пользователя {user_id} после /ask: {user_states[user_id]}")
-
-    await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=task_buttons)
-
-
-
-
-
-@router.callback_query(lambda call: call.data.startswith("ask_task:"))
-async def handle_task_selection_for_question(call: CallbackQuery):
-    """Обрабатывает выбор задачи для вопроса."""
-    user_id = call.from_user.id
-
-    # Логирование для диагностики
-    logging.info(f"Колбэк ask_task вызван для пользователя {user_id}, данные: {call.data}")
-
-    # Проверяем состояние
-    if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
-        await call.answer("Вы не находитесь в процессе выбора задачи.", show_alert=True)
-        return
-
-    # Получаем индекс выбранной задачи
-    task_index = int(call.data.split(":")[1])
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-
-    if task_index < 0 or task_index >= len(user_tasks):
-        await call.answer("Некорректный выбор задачи.", show_alert=True)
-        return
-
-    # Получаем выбранную задачу
-    task = user_tasks[task_index]
-
-    # Обновляем состояние пользователя
-    user_states[user_id] = {"step": "waiting_for_question", "task": task}
-
-    await call.message.edit_text(
-        f"Вы выбрали задачу: {task['title']}.\nТеперь напишите ваш вопрос."
+    await message.reply(
+        f"Ваши задачи:\n\n{task_list}\n\n"
+        "Введите номер задачи, по которой хотите задать вопрос."
     )
 
 
 
 
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "choosing_task")
+async def handle_task_selection_by_number(message: Message):
+    """Обрабатывает выбор задачи по номеру."""
+    user_id = message.from_user.id
+    state = user_states[user_id]
+
+    try:
+        task_number = int(message.text) - 1  # Номера задач начинаются с 1
+        user_tasks = state["tasks"]
+
+        if task_number < 0 or task_number >= len(user_tasks):
+            await message.reply("Некорректный номер задачи. Попробуйте снова.")
+            return
+
+        # Получаем выбранную задачу
+        task = user_tasks[task_number]
+        user_states[user_id] = {"step": "waiting_for_question", "task": task}
+
+        await message.reply(
+            f"Вы выбрали задачу: {task['title']}.\n"
+            "Теперь напишите ваш вопрос."
+        )
+    except ValueError:
+        await message.reply("Пожалуйста, введите корректный номер задачи.")
 
 
 
-@router.message(lambda message: message.from_user.id in user_states)
+
+
+
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
 async def handle_question_input(message: Message):
     """Обрабатывает ввод вопроса от пользователя."""
     user_id = message.from_user.id
-
-    # Логирование для диагностики
-    logging.info(f"Ввод вопроса от пользователя {user_id}, состояние: {user_states.get(user_id)}")
-
-    # Проверяем состояние
-    if user_id not in user_states or user_states[user_id]["step"] != "waiting_for_question":
-        await message.reply("Вы не выбрали задачу для вопроса. Используйте команду /ask.")
-        return
-
-    # Получаем данные состояния
     state = user_states[user_id]
     task = state["task"]
     question = message.text
@@ -425,6 +401,7 @@ async def handle_question_input(message: Message):
     await message.reply("Ваш вопрос отправлен администратору.")
     # Удаляем состояние пользователя
     del user_states[user_id]
+
 
 
 
