@@ -323,59 +323,62 @@ async def send_reminders():
 
 
 
-def generate_task_buttons_for_questions(user_id):
-    """Генерирует кнопки задач для вопросов"""
-    buttons = []
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-    for i, task in enumerate(user_tasks):
-        buttons.append([InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask:{i}")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
-
 @router.message(Command("ask"))
 async def ask_question(message: Message):
     """Позволяет пользователю выбрать задачу и задать вопрос"""
     logging.info(f"Команда /ask от {message.from_user.id}")
     user_id = message.from_user.id
-    task_buttons = generate_task_buttons_for_questions(user_id)
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
 
-    if not task_buttons:
+    if not user_tasks:
         await message.reply("У вас нет активных задач.")
         return
 
+    task_list = "\n".join(
+        [f"{i + 1}. {task['title']} (Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')})"
+         for i, task in enumerate(user_tasks)]
+    )
     user_states[user_id] = {
         "step": "choosing_task_for_question",
-        "question": {}
+        "tasks": user_tasks
     }
 
-    await message.reply("Выберите задачу, по которой у вас есть вопрос:", reply_markup=task_buttons)
+    await message.reply(
+        f"Ваши задачи:\n\n{task_list}\n\n"
+        "Введите номер задачи, по которой вы хотите задать вопрос."
+    )
 
-@router.callback_query(lambda call: call.data.startswith("ask:"))
-async def handle_task_selection_for_question(call: CallbackQuery):
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "choosing_task_for_question")
+async def handle_task_selection_for_question(message: Message):
     """Обрабатывает выбор задачи для вопроса"""
-    user_id = call.from_user.id
+    user_id = message.from_user.id
+    state = user_states[user_id]
 
-    if user_id not in user_states or user_states[user_id]["step"] != "choosing_task_for_question":
-        await call.answer("Вы не находитесь в процессе задания вопроса.", show_alert=True)
+    try:
+        task_index = int(message.text) - 1
+        if task_index < 0 or task_index >= len(state["tasks"]):
+            raise ValueError("Invalid task number.")
+    except ValueError:
+        await message.reply("Некорректный номер задачи. Попробуйте снова.")
         return
 
-    task_index = int(call.data.split(":")[1])
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+    state["task"] = state["tasks"][task_index]
+    state["step"] = "writing_question"
 
-    if task_index < 0 or task_index >= len(user_tasks):
-        await call.answer("Некорректный выбор задачи.", show_alert=True)
-        return
-
-    user_states[user_id]["question"]["task"] = user_tasks[task_index]
-    user_states[user_id]["step"] = "writing_question"
-
-    await call.message.edit_text("Напишите ваш вопрос по задаче:")
+    await message.reply(
+        f"Вы выбрали задачу:\n\n"
+        f"Название: {state['task']['title']}\n"
+        f"Описание: {state['task']['description']}\n"
+        f"Дедлайн: {state['task']['deadline'].strftime('%d.%m.%Y %H:%M')}\n\n"
+        "Теперь напишите ваш вопрос по этой задаче."
+    )
 
 @router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "writing_question")
 async def handle_question_submission(message: Message):
     """Обрабатывает отправку вопроса пользователя"""
     user_id = message.from_user.id
     state = user_states[user_id]
-    task = state["question"]["task"]
+    task = state["task"]
 
     # Отправляем вопрос администратору
     await bot.send_message(
