@@ -323,88 +323,6 @@ async def send_reminders():
 
 
 
-import asyncio
-import os
-import logging
-from datetime import datetime, timedelta
-from aiogram import Bot, Dispatcher, Router
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from pytz import timezone
-
-LOCAL_TZ = timezone("Asia/Aqtobe")
-
-# Токен бота
-API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
-
-# Укажите ID администратора
-ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
-
-# Инициализация логирования
-logging.basicConfig(level=logging.INFO)
-
-# Инициализация бота, диспетчера и маршрутизатора
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher()
-router = Router()
-
-# Состояние для хранения временных данных
-tasks = []  # Список всех задач
-user_states = {}  # Для отслеживания этапов создания задачи или вопросов
-user_database = {}  # База данных пользователей
-
-def generate_navigation_buttons():
-    """Генерирует кнопки для навигации между шагами"""
-    buttons = [
-        [InlineKeyboardButton(text="Назад", callback_data="back")],
-        [InlineKeyboardButton(text="Отменить", callback_data="cancel")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def calculate_time_left(deadline):
-    """Вычисляет оставшееся время до дедлайна"""
-    now = datetime.now(LOCAL_TZ)  # Локальное время
-    if deadline.tzinfo is None:  # Если дедлайн без часового пояса
-        deadline = LOCAL_TZ.localize(deadline)
-    remaining = deadline - now
-
-    if remaining.total_seconds() <= 0:
-        return "Просрочено"
-
-    days, seconds = divmod(remaining.total_seconds(), 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, _ = divmod(seconds, 60)
-    return f"{int(days)} д. {int(hours)} ч. {int(minutes)} мин."
-
-def generate_task_buttons_for_questions(user_id):
-    """Генерирует кнопки задач для вопросов"""
-    buttons = []
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-    for i, task in enumerate(user_tasks):
-        buttons.append([InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask:{i}")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
-
-@router.message(Command("start"))
-async def send_welcome(message: Message):
-    """Приветственное сообщение"""
-    logging.info(f"Команда /start от {message.from_user.id}")
-    user_database[message.from_user.username] = message.from_user.id
-    await message.reply(
-        "Привет! Я бот для управления задачами.\n\n"
-        "Доступные команды:\n"
-        "/send - Добавить задачу (для администратора).\n"
-        "/tasks - Посмотреть список задач.\n"
-        "/complete - Завершить задачу.\n"
-        "/ask - Задать вопрос по задаче.\n\n"
-        "Чтобы узнать свой ID, используйте команду /myid."
-    )
-
-@router.message(Command("myid"))
-async def get_my_id(message: Message):
-    """Отправляет ID пользователя"""
-    logging.info(f"Команда /myid от {message.from_user.id}")
-    await message.reply(f"Ваш ID: {message.from_user.id}")
 
 @router.message(Command("ask"))
 async def ask_question(message: Message):
@@ -466,6 +384,7 @@ async def handle_question_submission(message: Message):
 
     # Удаляем состояние
     del user_states[user_id]
+
 
 async def main():
     """Запуск бота"""
