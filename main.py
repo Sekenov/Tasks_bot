@@ -318,6 +318,72 @@ async def send_reminders():
 
         await asyncio.sleep(60)
 
+
+
+
+
+
+@router.message(Command("ask"))
+async def ask_question(message: Message):
+    """Позволяет пользователю выбрать задачу и задать вопрос"""
+    logging.info(f"Команда /ask от {message.from_user.id}")
+    user_id = message.from_user.id
+    task_buttons = generate_task_buttons(user_id)
+
+    if not task_buttons:
+        await message.reply("У вас нет активных задач.")
+        return
+
+    user_states[user_id] = {
+        "step": "choosing_task",
+        "question": {}
+    }
+
+    await message.reply("Выберите задачу, по которой у вас есть вопрос:", reply_markup=task_buttons)
+
+@router.callback_query(lambda call: call.data.startswith("task:"))
+async def handle_task_selection(call: CallbackQuery):
+    """Обрабатывает выбор задачи для вопроса"""
+    user_id = call.from_user.id
+
+    if user_id not in user_states or user_states[user_id]["step"] != "choosing_task":
+        await call.answer("Вы не находитесь в процессе задания вопроса.", show_alert=True)
+        return
+
+    task_index = int(call.data.split(":")[1])
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if task_index < 0 or task_index >= len(user_tasks):
+        await call.answer("Некорректный выбор задачи.", show_alert=True)
+        return
+
+    user_states[user_id]["question"]["task"] = user_tasks[task_index]
+    user_states[user_id]["step"] = "writing_question"
+
+    await call.message.edit_text("Напишите ваш вопрос по задаче:")
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "writing_question")
+async def handle_question_submission(message: Message):
+    """Обрабатывает отправку вопроса пользователя"""
+    user_id = message.from_user.id
+    state = user_states[user_id]
+    task = state["question"]["task"]
+
+    # Отправляем вопрос администратору
+    await bot.send_message(
+        ADMIN_ID,
+        f"Пользователь @{message.from_user.username} задал вопрос по задаче:\n\n"
+        f"Название задачи: {task['title']}\n"
+        f"Описание: {task['description']}\n"
+        f"Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}\n\n"
+        f"Вопрос: {message.text}"
+    )
+
+    await message.reply("Ваш вопрос отправлен администратору.")
+
+    # Удаляем состояние
+    del user_states[user_id]
+
 async def main():
     """Запуск бота"""
     dp.include_router(router)
