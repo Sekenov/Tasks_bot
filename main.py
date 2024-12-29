@@ -323,6 +323,13 @@ async def send_reminders():
 
 
 
+def generate_task_buttons_for_questions(user_id):
+    """Генерирует кнопки задач для вопросов"""
+    buttons = []
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+    for i, task in enumerate(user_tasks):
+        buttons.append([InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask:{i}")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
 
 @router.message(Command("ask"))
 async def ask_question(message: Message):
