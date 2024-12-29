@@ -14,7 +14,7 @@ LOCAL_TZ = timezone("Asia/Aqtobe")
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
 # Укажите ID администратора
-ADMIN_ID = 1313126991  # Замените на ваш Telegram ID
+ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
@@ -246,6 +246,7 @@ async def handle_task_creation(message: Message):
             }
             tasks.append(task)
 
+            # Уведомляем получателя задачи
             await bot.send_message(
                 task["recipient"],
                 f"Вам добавлена новая задача:\n\n<b>{task['title']}</b>\n"
@@ -253,7 +254,11 @@ async def handle_task_creation(message: Message):
                 f"Дедлайн: <i>{task['deadline'].strftime('%d.%m.%Y %H:%M')}</i>",
                 parse_mode=ParseMode.HTML,
             )
-            await message.reply("Задача успешно добавлена!")
+
+            # Уведомляем администратора об успешном создании
+            await message.reply("Задача успешно добавлена! Процесс создания задачи завершен.")
+
+            # Удаляем состояние администратора
             del user_states[user_id]
         except ValueError:
             await message.reply("Укажите корректный формат даты (день.месяц.год ЧЧ:ММ).", reply_markup=generate_navigation_buttons())
@@ -312,120 +317,6 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
-
-
-
-
-
-
-
-
-
-
-@router.message(Command("ask"))
-async def ask_question(message: Message):
-    """Команда для выбора задачи и отправки вопроса админу"""
-    user_id = message.from_user.id
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-
-    # Логируем задачи пользователя
-    logging.info(f"Задачи пользователя {user_id}: {user_tasks}")
-
-    if not user_tasks:
-        await message.reply("У вас нет активных задач для вопросов.")
-        return
-
-    # Генерируем кнопки
-    buttons = [
-        [InlineKeyboardButton(text=f"{i + 1}. {task['title']}", callback_data=f"ask_task:{i}")]
-        for i, task in enumerate(user_tasks)
-    ]
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-    # Обновляем состояние
-    user_states[user_id] = {"step": "waiting_for_task_choice"}
-    await message.reply("Выберите задачу, по которой хотите задать вопрос:", reply_markup=keyboard)
-
-
-@router.callback_query(lambda call: call.data.startswith("ask_task:"))
-async def choose_task_for_question(call: CallbackQuery):
-    """Запросить у пользователя вопрос по выбранной задаче"""
-    try:
-        task_index = int(call.data.split(":")[1])
-        user_id = call.from_user.id
-
-        # Логируем действие пользователя
-        logging.info(f"Пользователь {user_id} выбрал задачу с индексом {task_index}")
-
-        user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-
-        # Проверка валидности задачи
-        if task_index < 0 or task_index >= len(user_tasks):
-            await call.answer("Некорректный выбор задачи.", show_alert=True)
-            logging.warning(f"Некорректный индекс задачи: {task_index}")
-            return
-
-        # Получаем задачу
-        task = user_tasks[task_index]
-        logging.info(f"Выбрана задача: {task}")
-
-        # Обновляем состояние пользователя
-        user_states[user_id] = {
-            "step": "waiting_for_question",
-            "task": task
-        }
-        logging.info(f"Состояние обновлено для пользователя {user_id}: {user_states[user_id]}")
-
-        # Отправляем сообщение с запросом вопроса
-        await call.message.edit_text(
-            f"Вы выбрали задачу: {task['title']}\n\nНапишите свой вопрос."
-        )
-        logging.info(f"Сообщение обновлено для пользователя {user_id}")
-    except Exception as e:
-        # Логируем ошибки
-        logging.error(f"Ошибка в обработчике выбора задачи: {e}")
-        await call.answer("Произошла ошибка. Попробуйте снова.", show_alert=True)
-
-
-
-
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
-async def handle_question_input(message: Message):
-    """Отправить вопрос администраторам"""
-    user_id = message.from_user.id
-    state = user_states[user_id]
-    task = state["task"]
-
-    # Удалить состояние пользователя
-    del user_states[user_id]
-
-    # Отправить вопрос админу
-    await bot.send_message(
-        ADMIN_ID,
-        f"Пользователь @{message.from_user.username or 'Неизвестный'} задал вопрос по задаче:\n\n"
-        f"Задача: {task['title']}\n"
-        f"Описание: {task['description']}\n"
-        f"Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"Вопрос: {message.text}"
-    )
-    await message.reply("Ваш вопрос отправлен администратору. Спасибо!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 async def main():
     """Запуск бота"""
