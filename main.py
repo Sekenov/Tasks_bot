@@ -14,7 +14,7 @@ LOCAL_TZ = timezone("Asia/Aqtobe")
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
 # Укажите ID администратора
-ADMIN_ID = 1313126991  # Замените на ваш Telegram ID
+ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
@@ -246,7 +246,6 @@ async def handle_task_creation(message: Message):
             }
             tasks.append(task)
 
-            # Уведомляем получателя задачи
             await bot.send_message(
                 task["recipient"],
                 f"Вам добавлена новая задача:\n\n<b>{task['title']}</b>\n"
@@ -254,11 +253,7 @@ async def handle_task_creation(message: Message):
                 f"Дедлайн: <i>{task['deadline'].strftime('%d.%m.%Y %H:%M')}</i>",
                 parse_mode=ParseMode.HTML,
             )
-
-            # Уведомляем администратора об успешном создании
-            await message.reply("Задача успешно добавлена! Процесс создания задачи завершен.")
-
-            # Удаляем состояние администратора
+            await message.reply("Задача успешно добавлена!")
             del user_states[user_id]
         except ValueError:
             await message.reply("Укажите корректный формат даты (день.месяц.год ЧЧ:ММ).", reply_markup=generate_navigation_buttons())
@@ -317,84 +312,6 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
-
-
-
-
-
-
-@router.message(Command("ask"))
-async def ask_question(message: Message):
-    """Позволяет пользователю выбрать задачу и задать вопрос"""
-    logging.info(f"Команда /ask от {message.from_user.id}")
-    user_id = message.from_user.id
-    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
-
-    if not user_tasks:
-        await message.reply("У вас нет активных задач.")
-        return
-
-    task_list = "\n".join(
-        [f"{i + 1}. {task['title']} (Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')})"
-         for i, task in enumerate(user_tasks)]
-    )
-    user_states[user_id] = {
-        "step": "choosing_task_for_question",
-        "tasks": user_tasks
-    }
-
-    await message.reply(
-        f"Ваши задачи:\n\n{task_list}\n\n"
-        "Введите номер задачи, по которой вы хотите задать вопрос."
-    )
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "choosing_task_for_question")
-async def handle_task_selection_for_question(message: Message):
-    """Обрабатывает выбор задачи для вопроса"""
-    user_id = message.from_user.id
-    state = user_states[user_id]
-
-    try:
-        task_index = int(message.text) - 1
-        if task_index < 0 or task_index >= len(state["tasks"]):
-            raise ValueError("Invalid task number.")
-    except ValueError:
-        await message.reply("Некорректный номер задачи. Попробуйте снова.")
-        return
-
-    state["task"] = state["tasks"][task_index]
-    state["step"] = "writing_question"
-
-    await message.reply(
-        f"Вы выбрали задачу:\n\n"
-        f"Название: {state['task']['title']}\n"
-        f"Описание: {state['task']['description']}\n"
-        f"Дедлайн: {state['task']['deadline'].strftime('%d.%m.%Y %H:%M')}\n\n"
-        "Теперь напишите ваш вопрос по этой задаче."
-    )
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "writing_question")
-async def handle_question_submission(message: Message):
-    """Обрабатывает отправку вопроса пользователя"""
-    user_id = message.from_user.id
-    state = user_states[user_id]
-    task = state["task"]
-
-    # Отправляем вопрос администратору
-    await bot.send_message(
-        ADMIN_ID,
-        f"Пользователь @{message.from_user.username} задал вопрос по задаче:\n\n"
-        f"Название задачи: {task['title']}\n"
-        f"Описание: {task['description']}\n"
-        f"Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"Вопрос: {message.text}"
-    )
-
-    await message.reply("Ваш вопрос отправлен администратору.")
-
-    # Удаляем состояние
-    del user_states[user_id]
-
 
 async def main():
     """Запуск бота"""
