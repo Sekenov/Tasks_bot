@@ -193,7 +193,6 @@ async def start_task_creation(message: Message):
         "task": {},
     }
     await message.reply("Введите название задачи:", reply_markup=generate_navigation_buttons())
-
 @router.message(lambda message: message.from_user.id in user_states)
 async def handle_task_creation(message: Message):
     """Обрабатывает этапы создания задачи"""
@@ -208,27 +207,15 @@ async def handle_task_creation(message: Message):
     elif state["step"] == "waiting_for_task_description":
         state["task"]["description"] = message.text
         state["step"] = "waiting_for_task_recipient"
-        await message.reply("Введите ID пользователя или @username, которому адресована задача:", reply_markup=generate_navigation_buttons())
 
-    elif state["step"] == "waiting_for_task_recipient":
-        recipient_id = None
-
-        if message.text.startswith("@"):
-            username = message.text.lstrip("@")
-            recipient_id = user_database.get(username)
-            if not recipient_id:
-                await message.reply("Этот пользователь не зарегистрирован. Попросите его отправить команду /start.")
-                return
-        else:
-            try:
-                recipient_id = int(message.text)
-            except ValueError:
-                await message.reply("Укажите корректный ID или @username.")
-                return
-
-        state["task"]["recipient"] = recipient_id
-        state["step"] = "waiting_for_task_deadline_date"
-        await message.reply("Введите дедлайн задачи (день.месяц.год ЧЧ:ММ):", reply_markup=generate_navigation_buttons())
+        # Добавляем кнопки для выбора пользователя
+        recipient_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="@shyngys_n", callback_data="recipient:@shyngys_n")],
+            [InlineKeyboardButton(text="@EsengeldiBagit", callback_data="recipient:@EsengeldiBagit")],
+            [InlineKeyboardButton(text="@kimjjk", callback_data="recipient:@kimjjk")],
+            [InlineKeyboardButton(text="Ввести вручную", callback_data="recipient:manual")],
+        ])
+        await message.reply("Выберите пользователя из списка или введите вручную:", reply_markup=recipient_keyboard)
 
     elif state["step"] == "waiting_for_task_deadline_date":
         try:
@@ -257,6 +244,27 @@ async def handle_task_creation(message: Message):
             del user_states[user_id]
         except ValueError:
             await message.reply("Укажите корректный формат даты (день.месяц.год ЧЧ:ММ).", reply_markup=generate_navigation_buttons())
+@router.callback_query(lambda call: call.data.startswith("recipient:"))
+async def handle_recipient_selection(call: CallbackQuery):
+    """Обрабатывает выбор получателя задачи"""
+    user_id = call.from_user.id
+    if user_id not in user_states:
+        await call.answer("Вы не находитесь в процессе создания задачи.", show_alert=True)
+        return
+
+    selected_option = call.data.split(":")[1]
+    if selected_option == "manual":
+        user_states[user_id]["step"] = "waiting_for_task_recipient"
+        await call.message.edit_text("Введите ID пользователя или @username вручную:")
+    else:
+        recipient_id = user_database.get(selected_option.lstrip("@"))
+        if not recipient_id:
+            await call.message.edit_text(f"Пользователь {selected_option} не зарегистрирован.")
+        else:
+            user_states[user_id]["task"]["recipient"] = recipient_id
+            user_states[user_id]["step"] = "waiting_for_task_deadline_date"
+            await call.message.edit_text("Введите дедлайн задачи (день.месяц.год ЧЧ:ММ):", reply_markup=generate_navigation_buttons())
+
 
 @router.callback_query()
 async def handle_navigation(call: CallbackQuery):
@@ -312,57 +320,6 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
-
-
-@router.message(Command("question"))
-async def ask_question(message: Message):
-    """Позволяет пользователю отправить вопрос админу"""
-    logging.info(f"Команда /question от пользователя {message.from_user.id} (@{message.from_user.username})")
-
-    user_id = message.from_user.id
-    user_states[user_id] = {"step": "waiting_for_question"}  # Устанавливаем состояние
-
-    logging.info(f"Состояние для пользователя {user_id}: {user_states[user_id]}")
-    await message.reply("Введите ваш вопрос, и я отправлю его администратору.")
-
-
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id].get(
-    "step") == "waiting_for_question")
-async def handle_user_question(message: Message):
-    """Обрабатывает вопрос пользователя и перенаправляет админу"""
-    user_id = message.from_user.id
-    username = message.from_user.username or "Без имени"
-    question_text = message.text
-
-    # Логируем информацию о вопросе
-    logging.info(f"Получен вопрос от пользователя {user_id} (@{username}): {question_text}")
-
-    try:
-        # Проверяем, установлен ли ADMIN_ID
-        if not ADMIN_ID:
-            logging.error("ADMIN_ID не установлен. Сообщение админу не будет отправлено.")
-            await message.reply("Ошибка конфигурации: ADMIN_ID не установлен.")
-            return
-
-        # Отправляем сообщение админу
-        await bot.send_message(
-            ADMIN_ID,
-            f"Новый вопрос от пользователя @{username} (ID: {user_id}):\n\n{question_text}"
-        )
-        logging.info(f"Вопрос успешно отправлен админу (ID: {ADMIN_ID})")
-
-        # Уведомляем пользователя об успешной отправке
-        await message.reply("Ваш вопрос успешно отправлен администратору. Спасибо!")
-    except Exception as e:
-        # Логируем ошибку, если что-то пошло не так
-        logging.error(f"Ошибка отправки вопроса админу: {e}")
-        await message.reply("Произошла ошибка при отправке вашего вопроса. Попробуйте позже.")
-
-    # Очищаем состояние пользователя
-    if user_id in user_states:
-        del user_states[user_id]
-        logging.info(f"Состояние для пользователя {user_id} очищено.")
-
 
 async def main():
     """Запуск бота"""
