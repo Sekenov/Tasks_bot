@@ -338,6 +338,12 @@ async def handle_user_question(message: Message):
     logging.info(f"Получен вопрос от пользователя {user_id} (@{username}): {question_text}")
 
     try:
+        # Проверяем, установлен ли ADMIN_ID
+        if not ADMIN_ID:
+            logging.error("ADMIN_ID не установлен. Сообщение админу не будет отправлено.")
+            await message.reply("Ошибка конфигурации: ADMIN_ID не установлен.")
+            return
+
         # Отправляем сообщение админу
         await bot.send_message(
             ADMIN_ID,
