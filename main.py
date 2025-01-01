@@ -14,7 +14,7 @@ LOCAL_TZ = timezone("Asia/Aqtobe")
 API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
 # Укажите ID администратора
-ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
+ADMIN_ID = 1313126991  # Замените на ваш Telegram ID
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
@@ -312,6 +312,52 @@ async def send_reminders():
                 task["reminders"]["1_hour"] = True
 
         await asyncio.sleep(60)
+
+
+
+@router.message(Command("question"))
+async def ask_question(message: Message):
+    """Позволяет пользователю отправить вопрос админу"""
+    logging.info(f"Команда /question от {message.from_user.id}")
+    user_id = message.from_user.id
+    user_states[user_id] = {"step": "waiting_for_question"}
+    await message.reply("Введите ваш вопрос, и я отправлю его администратору.")
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
+async def handle_user_question(message: Message):
+    """Обрабатывает вопрос пользователя и перенаправляет админу"""
+    user_id = message.from_user.id
+    username = message.from_user.username or "Без имени"
+    question_text = message.text
+
+    # Отправляем вопрос админу
+    await bot.send_message(
+        ADMIN_ID,
+        f"Новый вопрос от пользователя @{username} (ID: {user_id}):\n\n{question_text}"
+    )
+
+    # Подтверждаем пользователю, что вопрос отправлен
+    await message.reply("Ваш вопрос отправлен администратору. Спасибо!")
+    del user_states[user_id]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 async def main():
     """Запуск бота"""
