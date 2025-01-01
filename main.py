@@ -217,6 +217,26 @@ async def handle_task_creation(message: Message):
         ])
         await message.reply("Выберите пользователя из списка или введите вручную:", reply_markup=recipient_keyboard)
 
+    elif state["step"] == "waiting_for_task_recipient":
+        # Обработка вручного ввода
+        recipient_id = None
+        if message.text.startswith("@"):
+            username = message.text.lstrip("@")
+            recipient_id = user_database.get(username)
+            if not recipient_id:
+                await message.reply("Этот пользователь не зарегистрирован. Попросите его отправить команду /start.")
+                return
+        else:
+            try:
+                recipient_id = int(message.text)
+            except ValueError:
+                await message.reply("Укажите корректный ID или @username.")
+                return
+
+        state["task"]["recipient"] = recipient_id
+        state["step"] = "waiting_for_task_deadline_date"
+        await message.reply("Введите дедлайн задачи (день.месяц.год ЧЧ:ММ):", reply_markup=generate_navigation_buttons())
+
     elif state["step"] == "waiting_for_task_deadline_date":
         try:
             deadline = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
@@ -244,6 +264,13 @@ async def handle_task_creation(message: Message):
             del user_states[user_id]
         except ValueError:
             await message.reply("Укажите корректный формат даты (день.месяц.год ЧЧ:ММ).", reply_markup=generate_navigation_buttons())
+
+
+
+
+
+
+
 @router.callback_query(lambda call: call.data.startswith("recipient:"))
 async def handle_recipient_selection(call: CallbackQuery):
     """Обрабатывает выбор получателя задачи"""
