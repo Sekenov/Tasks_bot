@@ -315,6 +315,10 @@ async def send_reminders():
 
 
 
+
+
+
+
 @router.message(Command("question"))
 async def ask_question(message: Message):
     """Позволяет пользователю отправить вопрос админу"""
@@ -322,23 +326,28 @@ async def ask_question(message: Message):
     user_id = message.from_user.id
     user_states[user_id] = {"step": "waiting_for_question"}
     await message.reply("Введите ваш вопрос, и я отправлю его администратору.")
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id]["step"] == "waiting_for_question")
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id].get("step") == "waiting_for_question")
 async def handle_user_question(message: Message):
     """Обрабатывает вопрос пользователя и перенаправляет админу"""
     user_id = message.from_user.id
     username = message.from_user.username or "Без имени"
     question_text = message.text
 
-    # Отправляем вопрос админу
-    await bot.send_message(
-        ADMIN_ID,
-        f"Новый вопрос от пользователя @{username} (ID: {user_id}):\n\n{question_text}"
-    )
+    # Уведомляем админа о новом вопросе
+    try:
+        await bot.send_message(
+            ADMIN_ID,
+            f"Новый вопрос от пользователя @{username} (ID: {user_id}):\n\n{question_text}"
+        )
+        # Уведомляем пользователя об успешной отправке
+        await message.reply("Ваш вопрос успешно отправлен администратору. Спасибо!")
+    except Exception as e:
+        logging.error(f"Ошибка отправки вопроса админу: {e}")
+        await message.reply("Произошла ошибка при отправке вашего вопроса. Попробуйте позже.")
 
-    # Подтверждаем пользователю, что вопрос отправлен
-    await message.reply("Ваш вопрос отправлен администратору. Спасибо!")
-    del user_states[user_id]
-
+    # Убираем состояние пользователя
+    if user_id in user_states:
+        del user_states[user_id]
 
 
 
