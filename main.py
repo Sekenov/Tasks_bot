@@ -314,58 +314,48 @@ async def send_reminders():
         await asyncio.sleep(60)
 
 
-
-
-
-
-
 @router.message(Command("question"))
 async def ask_question(message: Message):
     """Позволяет пользователю отправить вопрос админу"""
-    logging.info(f"Команда /question от {message.from_user.id}")
+    logging.info(f"Команда /question от пользователя {message.from_user.id} (@{message.from_user.username})")
+
     user_id = message.from_user.id
-    user_states[user_id] = {"step": "waiting_for_question"}
+    user_states[user_id] = {"step": "waiting_for_question"}  # Устанавливаем состояние
+
+    logging.info(f"Состояние для пользователя {user_id}: {user_states[user_id]}")
     await message.reply("Введите ваш вопрос, и я отправлю его администратору.")
-@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id].get("step") == "waiting_for_question")
+
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id].get(
+    "step") == "waiting_for_question")
 async def handle_user_question(message: Message):
     """Обрабатывает вопрос пользователя и перенаправляет админу"""
     user_id = message.from_user.id
     username = message.from_user.username or "Без имени"
     question_text = message.text
 
-    # Уведомляем админа о новом вопросе
+    # Логируем информацию о вопросе
+    logging.info(f"Получен вопрос от пользователя {user_id} (@{username}): {question_text}")
+
     try:
+        # Отправляем сообщение админу
         await bot.send_message(
             ADMIN_ID,
             f"Новый вопрос от пользователя @{username} (ID: {user_id}):\n\n{question_text}"
         )
+        logging.info(f"Вопрос успешно отправлен админу (ID: {ADMIN_ID})")
+
         # Уведомляем пользователя об успешной отправке
         await message.reply("Ваш вопрос успешно отправлен администратору. Спасибо!")
     except Exception as e:
+        # Логируем ошибку, если что-то пошло не так
         logging.error(f"Ошибка отправки вопроса админу: {e}")
         await message.reply("Произошла ошибка при отправке вашего вопроса. Попробуйте позже.")
 
-    # Убираем состояние пользователя
+    # Очищаем состояние пользователя
     if user_id in user_states:
         del user_states[user_id]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        logging.info(f"Состояние для пользователя {user_id} очищено.")
 
 
 async def main():
