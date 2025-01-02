@@ -15,7 +15,6 @@ API_TOKEN = "8152580581:AAEYHPMHBe1OnqGwmmBMbmNikboC_iIbtKc"
 
 # Укажите ID администратора
 ADMIN_ID = 1041578395  # Замените на ваш Telegram ID
-
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
 
