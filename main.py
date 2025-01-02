@@ -268,6 +268,51 @@ async def handle_task_creation(message: Message):
 
 
 
+@router.message(Command("check"))
+async def check_users(message: Message):
+    """Отображает список пользователей для администратора."""
+    logging.info(f"Команда /check от {message.from_user.id}")
+    if message.from_user.id != ADMIN_ID:
+        await message.reply("У вас нет прав для выполнения этой команды.")
+        return
+
+    if not user_database:
+        await message.reply("В базе данных пока нет пользователей.")
+        return
+
+    # Генерация кнопок для пользователей
+    buttons = []
+    for username, user_id in user_database.items():
+        buttons.append([InlineKeyboardButton(text=f"@{username}", callback_data=f"check_user:{user_id}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.reply("Выберите пользователя для просмотра его задач:", reply_markup=keyboard)
+
+
+@router.callback_query(lambda call: call.data.startswith("check_user:"))
+async def show_user_tasks(call: CallbackQuery):
+    """Показывает задачи выбранного пользователя."""
+    user_id = int(call.data.split(":")[1])
+
+    # Получаем задачи пользователя
+    user_tasks = [task for task in tasks if task["recipient"] == user_id and not task.get("completed")]
+
+    if not user_tasks:
+        await call.message.edit_text("У пользователя нет активных задач.")
+        return
+
+    # Формируем список задач
+    task_list = "\n".join(
+        [
+            f"{i + 1}. {task['title']} (Дедлайн: {task['deadline'].strftime('%d.%m.%Y %H:%M')}, Осталось: {calculate_time_left(task['deadline'])})"
+            for i, task in enumerate(user_tasks)
+        ]
+    )
+
+    await call.message.edit_text(
+        f"Задачи пользователя:\n\n{task_list}\n\n"
+        "Отправьте номер задачи, чтобы получить полную информацию."
+    )
 
 
 
